@@ -3,10 +3,16 @@
 #include <QThread>
 #include <QTextStream>
 
+#ifdef CLAMLOG_COLOR_CONSOLE_STYLE
+#include <windows.h>
+#else
+#include <iostream>
+#endif
+
 namespace Clam {
 
 typedef enum {
-    INFO,       // Analysis information directed to supporters
+    INFO = 0,   // Analysis information directed to supporters
     DEBUG,      // Analysis debug information directed to developers
     WARNING,    // A warning, signalizing a deformity, without challenging the core operation
     CRITICAL,   // An critical, maybe that challenges the core operation
@@ -46,8 +52,15 @@ class Log::LogPrivate
 public:
     LogPrivate()
         : m_context()
-    {}
+    {
+#ifdef CLAMLOG_COLOR_CONSOLE_STYLE
+        out_console_handle_ = GetStdHandle(STD_OUTPUT_HANDLE);
+#endif
+    }
 
+#ifdef CLAMLOG_COLOR_CONSOLE_STYLE
+    HANDLE      out_console_handle_;
+#endif
     Level       m_level;
     LogContext  m_context;
 };
@@ -61,12 +74,36 @@ Log::Log(const char *file, int line, const char *function)
 Log::~Log()
 {
     delete d_ptr;
-    d_ptr = NULL;
+    d_ptr = nullptr;
 }
 
 Log &Log::info()
 {
     d_ptr->m_level = Level::INFO;
+    return *this;
+}
+
+Log &Log::debug()
+{
+    d_ptr->m_level = Level::DEBUG;
+    return *this;
+}
+
+Log &Log::warning()
+{
+    d_ptr->m_level = Level::WARNING;
+    return *this;
+}
+
+Log &Log::critical()
+{
+    d_ptr->m_level = Level::CRITICAL;
+    return *this;
+}
+
+Log &Log::fatal()
+{
+    d_ptr->m_level = Level::FATAL;
     return *this;
 }
 
@@ -77,7 +114,9 @@ void Log::operator <<(int nummber)
 
 void Log::log(const QString &message)
 {
+    QString first_process_msg = format(message);
     QString lvl_console_str;
+
 #ifdef CLAMLOG_COLOR_UNIX_STYLE
     switch (d_ptr->m_level)
     {
@@ -97,31 +136,81 @@ void Log::log(const QString &message)
         lvl_console_str = "\033[0;31;1m"+CLAMLOG_LEVEL_STRINGLIST[Level::FATAL]+"\033[0m";//red
         break;
     }
-#endif
+    QString final_msg = first_process_msg.replace("%{l}", lvl_console_str);
+    std::cout << final_msg.toStdString() << std::endl;
+#elif CLAMLOG_COLOR_CONSOLE_STYLE
+    QStringList msg_str_list = first_process_msg.split("%{l}");
+    if(msg_str_list.size() <= 1)
+    {
+        ::SetConsoleTextAttribute(d_ptr->out_console_handle_, 7);
+        auto size = static_cast<DWORD>(first_process_msg.size());
+        ::WriteConsoleA(d_ptr->out_console_handle_, first_process_msg.toLocal8Bit().data(), size, nullptr, nullptr);
+    }
+    else
+    {
+        for (int i = 0; i < msg_str_list.size(); i++)
+        {
+            auto size = static_cast<DWORD>(msg_str_list.at(i).size());
+            ::SetConsoleTextAttribute(d_ptr->out_console_handle_, 7);
+            ::WriteConsoleA(d_ptr->out_console_handle_, msg_str_list.at(i).toLocal8Bit().data(), size, nullptr, nullptr);
 
-    QString final_msg("[%{yyyy}-%{MM}-%{dd} %{hh}:%{mm}:%{ss}:%{zzz}][%{t}][%{l}]: %{d}");
+            if( i != (msg_str_list.size()-1))
+            {
+                switch (d_ptr->m_level)
+                {
+                    case Level::INFO :
+                        lvl_console_str = CLAMLOG_LEVEL_STRINGLIST[Level::INFO];
+                        ::SetConsoleTextAttribute(d_ptr->out_console_handle_, 10);//green
+                        break;
+                    case Level::DEBUG :
+                        lvl_console_str = CLAMLOG_LEVEL_STRINGLIST[Level::DEBUG];
+                        ::SetConsoleTextAttribute(d_ptr->out_console_handle_, 14);//yellow
+                        break;
+                    case Level::WARNING :
+                        lvl_console_str = CLAMLOG_LEVEL_STRINGLIST[Level::WARNING];
+                        ::SetConsoleTextAttribute(d_ptr->out_console_handle_, 11);//cyan
+                        break;
+                    case Level::CRITICAL :
+                        lvl_console_str = CLAMLOG_LEVEL_STRINGLIST[Level::CRITICAL];
+                        ::SetConsoleTextAttribute(d_ptr->out_console_handle_, 13);//magenta
+                        break;
+                    case Level::FATAL :
+                        lvl_console_str = CLAMLOG_LEVEL_STRINGLIST[Level::FATAL];
+                        ::SetConsoleTextAttribute(d_ptr->out_console_handle_, 12);//red
+                        break;
+                }
+                auto size_lvl = static_cast<DWORD>(lvl_console_str.size());
+                ::WriteConsoleA(d_ptr->out_console_handle_, lvl_console_str.toLocal8Bit().data(), size_lvl, nullptr, nullptr);
+            }
+        }
+        ::SetConsoleTextAttribute(d_ptr->out_console_handle_, 7);
+    }
+    ::WriteConsoleA(d_ptr->out_console_handle_, QString("\n").toLocal8Bit().data(), 1, nullptr, nullptr);
+#else
+    lvl_console_str = CLAMLOG_LEVEL_STRINGLIST[d_ptr->m_level];
+    QString final_msg = first_process_msg.replace("%{l}", lvl_console_str);
+    std::cout << final_msg.toStdString() << std::endl;
+#endif
+}
+
+QString Log::format(const QString &message)
+{
+    QString format_msg("[%{yyyy}-%{MM}-%{dd} %{hh}:%{mm}:%{ss}:%{zzz}][%{t}][%{l}]: %{d}");
     QDateTime curDataTime = QDateTime::currentDateTime();
-    final_msg.replace("%{yyyy}", curDataTime.toString("yyyy"));
-    final_msg.replace("%{MM}", curDataTime.toString("MM"));
-    final_msg.replace("%{dd}", curDataTime.toString("dd"));
-    final_msg.replace("%{hh}", curDataTime.toString("hh"));
-    final_msg.replace("%{mm}", curDataTime.toString("mm"));
-    final_msg.replace("%{ss}", curDataTime.toString("ss"));
-    final_msg.replace("%{zzz}", curDataTime.toString("zzz"));
-    final_msg.replace("%{t}", "0x" + QString("%1").arg(qulonglong(QThread::currentThread()), 10, 16, QLatin1Char('0')));
-    final_msg.replace("%{f}", QString(d_ptr->m_context.file));
-    final_msg.replace("%{r}", QString::number(d_ptr->m_context.line));
-    final_msg.replace("%{n}", QString(d_ptr->m_context.function));
-    final_msg.replace("%{l}", lvl_console_str);
-    final_msg.replace("%{d}", message);
-
-    QTextStream out(stdout);
-    out << final_msg;
-
-#ifdef Q_OS_WIN32
-    out << "\r";
-#endif
-    out << "\n";
+    format_msg.replace("%{yyyy}", curDataTime.toString("yyyy"));
+    format_msg.replace("%{MM}", curDataTime.toString("MM"));
+    format_msg.replace("%{dd}", curDataTime.toString("dd"));
+    format_msg.replace("%{hh}", curDataTime.toString("hh"));
+    format_msg.replace("%{mm}", curDataTime.toString("mm"));
+    format_msg.replace("%{ss}", curDataTime.toString("ss"));
+    format_msg.replace("%{zzz}", curDataTime.toString("zzz"));
+    format_msg.replace("%{t}", "0x" + QString("%1").arg(
+                           qulonglong(QThread::currentThread()), 10, 16, QLatin1Char('0')));
+    format_msg.replace("%{f}", QString(d_ptr->m_context.file));
+    format_msg.replace("%{r}", QString::number(d_ptr->m_context.line));
+    format_msg.replace("%{n}", QString(d_ptr->m_context.function));
+    format_msg.replace("%{d}", message);
+    return format_msg;
 }
 
 } // namespace Clam
