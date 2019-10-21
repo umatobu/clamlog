@@ -3,13 +3,13 @@
 
 #include <QScopedPointer>
 
-#define ClamLogInfo Clam::Log(__FILE__,__LINE__,__FUNCTION__).info
-#define ClamLogDebug Clam::Log(__FILE__,__LINE__,__FUNCTION__).debug
-#define ClamLogWarning Clam::Log(__FILE__,__LINE__,__FUNCTION__).warning
-#define ClamLogCritical Clam::Log(__FILE__,__LINE__,__FUNCTION__).critical
-#define ClamLogInfoFatal Clam::Log(__FILE__,__LINE__,__FUNCTION__).fatal
+#define uInfo UmaTobu::Log(__FILE__,__LINE__,__FUNCTION__).info
+#define uDebug UmaTobu::Log(__FILE__,__LINE__,__FUNCTION__).debug
+#define uWarning UmaTobu::Log(__FILE__,__LINE__,__FUNCTION__).warning
+#define uCritical UmaTobu::Log(__FILE__,__LINE__,__FUNCTION__).critical
+#define uFatal UmaTobu::Log(__FILE__,__LINE__,__FUNCTION__).fatal
 
-namespace Clam {
+namespace UmaTobu {
 
 
 class Log
@@ -25,6 +25,7 @@ public:
     Log& fatal();
 
     void operator << (int nummber);
+    void operator << (QString message);
 
 protected:
     void log(const QString &message);

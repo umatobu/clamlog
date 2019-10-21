@@ -2,14 +2,123 @@
 #include <QDateTime>
 #include <QThread>
 #include <QTextStream>
+#include <QWaitCondition>
+#include <QFile>
+#include <QFileInfo>
+#include <QDir>
+#include <QCoreApplication>
 
-#ifdef CLAMLOG_COLOR_CONSOLE_STYLE
+#ifdef ULOG_COLOR_CONSOLE_STYLE
 #include <windows.h>
 #else
 #include <iostream>
 #endif
 
-namespace Clam {
+namespace UmaTobu {
+
+class FileAppender : public QThread
+{
+public:
+    ~FileAppender()
+    {
+        is_activation_.store(false);
+        wait_condition_.notify_all();
+        quit();
+        wait();
+    }
+
+    static FileAppender &instance()
+    {
+        static FileAppender instance;
+        return instance;
+    }
+
+    void addMessage(const QString &message)
+    {
+        QMutexLocker lock(&msg_list_mutex_);
+        message_list_.push_back(message);
+        wait_condition_.notify_all();
+    }
+
+protected:
+    void run()
+    {
+        QString file_pathname = QCoreApplication::applicationDirPath()+"/log/log.txt";
+        QFile log_file(file_pathname);
+        if(!QFileInfo(file_pathname).absoluteDir().exists())
+        {
+            QDir().mkpath(QFileInfo(file_pathname).path());
+        }
+        bool is_open = log_file.open(QIODevice::WriteOnly | QIODevice::Append);
+
+        while(is_activation_.load())
+        {
+
+            if(is_open)
+            {
+                QString one_message;
+                {
+                    QMutexLocker lock(&(msg_list_mutex_));
+                    if(message_list_.size() > 0)
+                    {
+                        one_message = message_list_.takeFirst();
+                    }
+                    else
+                    {
+                        wait_condition_.wait(&(msg_list_mutex_));
+                    }
+                }
+
+                if(!one_message.isEmpty())
+                {
+                    QTextStream out(&log_file);
+                    out.setCodec("UTF-8");
+                    out << one_message;
+#ifdef Q_OS_WIN32
+                    out << "\r";
+#endif
+                    out << "\n";
+                }
+            }
+            else
+            {
+                is_open = log_file.open(QIODevice::WriteOnly | QIODevice::Append);
+                msleep(1000);
+            }
+
+
+            is_open = log_file.isOpen();
+            if(is_open && log_file.size() > 1024*1024*10)
+            {
+                if(QFile::copy(file_pathname,
+                               file_pathname + "." +
+                               QDateTime::currentDateTime().toString("yyyy-MM-dd hh_mm_ss") + ".txt"))
+                {
+                    log_file.close();
+                    log_file.remove();
+                    is_open = log_file.open(QIODevice::WriteOnly | QIODevice::Append);
+                }
+            }
+        }
+
+        log_file.close();
+    }
+
+private:
+    explicit FileAppender()
+        : is_activation_(true)
+    {
+        start();
+    }
+
+    explicit FileAppender(const FileAppender &) = delete;
+    FileAppender & operator=(const FileAppender &) = delete;
+
+    QAtomicInt          is_activation_;
+    QWaitCondition      wait_condition_;
+    QMutex              msg_list_mutex_;
+    QStringList         message_list_;
+};
 
 typedef enum {
     INFO = 0,   // Analysis information directed to supporters
@@ -53,12 +162,12 @@ public:
     LogPrivate()
         : m_context()
     {
-#ifdef CLAMLOG_COLOR_CONSOLE_STYLE
+#ifdef ULOG_COLOR_CONSOLE_STYLE
         out_console_handle_ = GetStdHandle(STD_OUTPUT_HANDLE);
 #endif
     }
 
-#ifdef CLAMLOG_COLOR_CONSOLE_STYLE
+#ifdef ULOG_COLOR_CONSOLE_STYLE
     HANDLE      out_console_handle_;
 #endif
     Level       m_level;
@@ -112,12 +221,21 @@ void Log::operator <<(int nummber)
     log(QString::number(nummber));
 }
 
+void Log::operator <<(QString message)
+{
+    log(message);
+}
+
 void Log::log(const QString &message)
 {
     QString first_process_msg = format(message);
     QString lvl_console_str;
 
-#ifdef CLAMLOG_COLOR_UNIX_STYLE
+    QString log_message = first_process_msg;
+    log_message.replace("%{l}", CLAMLOG_LEVEL_STRINGLIST[d_ptr->m_level]);
+    FileAppender::instance().addMessage(log_message);
+
+#ifdef ULOG_COLOR_UNIX_STYLE
     switch (d_ptr->m_level)
     {
     case Level::INFO :
@@ -138,7 +256,7 @@ void Log::log(const QString &message)
     }
     QString final_msg = first_process_msg.replace("%{l}", lvl_console_str);
     std::cout << final_msg.toStdString() << std::endl;
-#elif CLAMLOG_COLOR_CONSOLE_STYLE
+#elif ULOG_COLOR_CONSOLE_STYLE
     QStringList msg_str_list = first_process_msg.split("%{l}");
     if(msg_str_list.size() <= 1)
     {
