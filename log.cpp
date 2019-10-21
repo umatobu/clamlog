@@ -328,7 +328,7 @@ void Log::log(const QString &message)
 
 QString Log::format(const QString &message)
 {
-    QString format_msg("[%{yyyy}-%{MM}-%{dd} %{hh}:%{mm}:%{ss}:%{zzz}][%{t}][%{l}]: %{d}");
+    QString format_msg("[%{yyyy}-%{MM}-%{dd} %{hh}:%{mm}:%{ss}:%{zzz}][%{t}][%{l}][%{f}][%{r}][%{n}]: %{d}");
     QDateTime curDataTime = QDateTime::currentDateTime();
     format_msg.replace("%{yyyy}", curDataTime.toString("yyyy"));
     format_msg.replace("%{MM}", curDataTime.toString("MM"));
