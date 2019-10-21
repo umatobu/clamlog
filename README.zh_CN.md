@@ -32,7 +32,7 @@ win32 {
 
 ## VS
 
-入股是控制台输出，添加宏:
+控制台输出，添加宏:
 
 ```
 ULOG_COLOR_CONSOLE_STYLE
