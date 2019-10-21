@@ -3,14 +3,13 @@
 
 #include <QString>
 
-#define uInfo UmaTobu::Log(__FILE__,__LINE__,__FUNCTION__).info
-#define uDebug UmaTobu::Log(__FILE__,__LINE__,__FUNCTION__).debug
-#define uWarning UmaTobu::Log(__FILE__,__LINE__,__FUNCTION__).warning
-#define uCritical UmaTobu::Log(__FILE__,__LINE__,__FUNCTION__).critical
-#define uFatal UmaTobu::Log(__FILE__,__LINE__,__FUNCTION__).fatal
+#define cInfo Clam::Log(__FILE__,__LINE__,__FUNCTION__).info
+#define cDebug Clam::Log(__FILE__,__LINE__,__FUNCTION__).debug
+#define cWarning Clam::Log(__FILE__,__LINE__,__FUNCTION__).warning
+#define cCritical Clam::Log(__FILE__,__LINE__,__FUNCTION__).critical
+#define cFatal Clam::Log(__FILE__,__LINE__,__FUNCTION__).fatal
 
-namespace UmaTobu {
-
+namespace Clam {
 
 class Log
 {

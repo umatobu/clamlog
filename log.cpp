@@ -18,7 +18,7 @@
 #include <iostream>
 #endif
 
-namespace UmaTobu {
+namespace Clam {
 
 class FileAppender : public QThread
 {

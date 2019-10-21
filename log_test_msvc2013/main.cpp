@@ -11,8 +11,9 @@ int main(int argc, char *argv[])
     w.show();
 
 
-    uInfo() << 333;
-    uFatal() << 999;
+    cInfo() << 333;
+    cFatal() << 999;
+    cDebug() << "AAA";
 
     return a.exec();
 }
