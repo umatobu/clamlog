@@ -1,6 +1,6 @@
 <p align="center"><img width="100" src="./show/clam.png"></p>
 
-<div align="center">English | <a>简体中文</a></div>
+<div align="center">English | <a href="https://github.com/umatobu/clamlog/blob/master/README.zh_CN.md">简体中文</a></div>
 
 <h2 align="center">clamlog - a colored log library for qt5</h2>
 
