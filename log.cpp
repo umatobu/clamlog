@@ -8,8 +8,12 @@
 #include <QDir>
 #include <QCoreApplication>
 
-#ifdef ULOG_COLOR_CONSOLE_STYLE
-#include <windows.h>
+#ifdef ULOG_COLOR_UNIX_STYLE
+#include <iostream>
+#elif ULOG_COLOR_CONSOLE_STYLE
+#include <Windows.h>
+#elif ULOG_COLOR_MSVC_STYLE
+#include <Windows.h>
 #else
 #include <iostream>
 #endif
@@ -71,13 +75,22 @@ protected:
 
                 if(!one_message.isEmpty())
                 {
+                    while (one_message.right(1) == "\n")
+                    {
+                        one_message = one_message.mid(0, one_message.size() - 1);
+                    }
+                    while (one_message.right(1) == "\r")
+                    {
+                        one_message = one_message.mid(0, one_message.size() - 1);
+                    }
+#ifdef Q_OS_WIN32
+                    one_message.append("\r");
+#endif
+                    one_message.append("\n");
+
                     QTextStream out(&log_file);
                     out.setCodec("UTF-8");
                     out << one_message;
-#ifdef Q_OS_WIN32
-                    out << "\r";
-#endif
-                    out << "\n";
                 }
             }
             else
@@ -229,13 +242,13 @@ void Log::operator <<(QString message)
 void Log::log(const QString &message)
 {
     QString first_process_msg = format(message);
-    QString lvl_console_str;
 
-    QString log_message = first_process_msg;
-    log_message.replace("%{l}", CLAMLOG_LEVEL_STRINGLIST[d_ptr->m_level]);
-    FileAppender::instance().addMessage(log_message);
+    QString final_msg = first_process_msg;
+    final_msg.replace("%{l}", CLAMLOG_LEVEL_STRINGLIST[d_ptr->m_level]);
+    FileAppender::instance().addMessage(final_msg);
 
 #ifdef ULOG_COLOR_UNIX_STYLE
+    QString lvl_console_str;
     switch (d_ptr->m_level)
     {
     case Level::INFO :
@@ -254,9 +267,10 @@ void Log::log(const QString &message)
         lvl_console_str = "\033[0;31;1m"+CLAMLOG_LEVEL_STRINGLIST[Level::FATAL]+"\033[0m";//red
         break;
     }
-    QString final_msg = first_process_msg.replace("%{l}", lvl_console_str);
-    std::cout << final_msg.toStdString() << std::endl;
+    QString unix_msg = first_process_msg.replace("%{l}", lvl_console_str);
+    std::cout << unix_msg.toStdString() << std::endl;
 #elif ULOG_COLOR_CONSOLE_STYLE
+    QString lvl_console_str;
     QStringList msg_str_list = first_process_msg.split("%{l}");
     if(msg_str_list.size() <= 1)
     {
@@ -304,9 +318,10 @@ void Log::log(const QString &message)
         ::SetConsoleTextAttribute(d_ptr->out_console_handle_, 7);
     }
     ::WriteConsoleA(d_ptr->out_console_handle_, QString("\n").toLocal8Bit().data(), 1, nullptr, nullptr);
+#elif ULOG_COLOR_MSVC_STYLE
+    final_msg.append("\n");
+    OutputDebugStringA(final_msg.toStdString().c_str());
 #else
-    lvl_console_str = CLAMLOG_LEVEL_STRINGLIST[d_ptr->m_level];
-    QString final_msg = first_process_msg.replace("%{l}", lvl_console_str);
     std::cout << final_msg.toStdString() << std::endl;
 #endif
 }

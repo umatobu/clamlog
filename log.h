@@ -1,7 +1,7 @@
 #ifndef LOG_H
 #define LOG_H
 
-#include <QScopedPointer>
+#include <QString>
 
 #define uInfo UmaTobu::Log(__FILE__,__LINE__,__FUNCTION__).info
 #define uDebug UmaTobu::Log(__FILE__,__LINE__,__FUNCTION__).debug
