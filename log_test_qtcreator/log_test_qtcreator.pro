@@ -1,11 +1,10 @@
-QT += core
-QT -= gui
+QT       += core gui widgets
+
 
 CONFIG += c++11
 
 TARGET = log_test_qtcreator
-CONFIG += console
-CONFIG -= app_bundle
+#CONFIG += console
 
 TEMPLATE = app
 
@@ -32,7 +31,12 @@ win32 {
 
 SOURCES += \
     main.cpp \
-    ../log.cpp
+    ../clamlog.cpp \
+    mainwindow.cpp
 
 HEADERS += \
-    ../log.h
+    ../clamlog.h \
+    mainwindow.h
+
+FORMS += \
+    mainwindow.ui
