@@ -1,4 +1,4 @@
-#include "log.h"
+#include "clamlog.h"
 #include <QDateTime>
 #include <QThread>
 #include <QTextStream>
@@ -7,6 +7,7 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QCoreApplication>
+#include <QMutexLocker>
 
 #ifdef ULOG_COLOR_UNIX_STYLE
 #include <iostream>
@@ -20,21 +21,74 @@
 
 namespace Clam {
 
+LogContext::LogContext(const char *file_in, int line_in, const char *function_in)
+    : file{file_in}
+    , line{line_in}
+    , function{function_in}
+{
+
+}
+
+LogContext &LogContext::info()
+{
+    lvl = INFO;
+    return *this;
+}
+
+LogContext &LogContext::debug()
+{
+    lvl = DEBUG;
+    return *this;
+}
+
+LogContext &LogContext::warning()
+{
+    lvl = WARNING;
+    return *this;
+}
+
+LogContext &LogContext::critical()
+{
+    lvl = CRITICAL;
+    return *this;
+}
+
+LogContext &LogContext::fatal()
+{
+    lvl = FATAL;
+    return *this;
+}
+
+void LogContext::operator <<(int number)
+{
+    Log::instance().log(QString::number(number), *this);
+}
+
+void LogContext::operator <<(QString message)
+{
+    Log::instance().log(message, *this);
+}
+
 class FileAppender : public QThread
 {
 public:
+    explicit FileAppender()
+        : is_activation_(true)
+    {
+        start();
+    }
+
     ~FileAppender()
     {
-        is_activation_.store(false);
-        wait_condition_.notify_all();
+        stop();
         quit();
         wait();
     }
 
-    static FileAppender &instance()
+    void stop()
     {
-        static FileAppender instance;
-        return instance;
+        is_activation_.store(false);
+        wait_condition_.notify_all();
     }
 
     void addMessage(const QString &message)
@@ -55,21 +109,21 @@ protected:
         }
         bool is_open = log_file.open(QIODevice::WriteOnly | QIODevice::Append);
 
-        while(is_activation_.load())
+        while(is_activation_.load() || message_list_.size() > 0)
         {
 
             if(is_open)
             {
                 QString one_message;
                 {
-                    QMutexLocker lock(&(msg_list_mutex_));
+                    QMutexLocker lock(&msg_list_mutex_);
                     if(message_list_.size() > 0)
                     {
                         one_message = message_list_.takeFirst();
                     }
                     else
                     {
-                        wait_condition_.wait(&(msg_list_mutex_));
+                        wait_condition_.wait(&msg_list_mutex_);
                     }
                 }
 
@@ -118,62 +172,16 @@ protected:
     }
 
 private:
-    explicit FileAppender()
-        : is_activation_(true)
-    {
-        start();
-    }
-
-    explicit FileAppender(const FileAppender &) = delete;
-    FileAppender & operator=(const FileAppender &) = delete;
-
     QAtomicInt          is_activation_;
     QWaitCondition      wait_condition_;
     QMutex              msg_list_mutex_;
     QStringList         message_list_;
 };
 
-typedef enum {
-    INFO = 0,   // Analysis information directed to supporters
-    DEBUG,      // Analysis debug information directed to developers
-    WARNING,    // A warning, signalizing a deformity, without challenging the core operation
-    CRITICAL,   // An critical, maybe that challenges the core operation
-    FATAL       // Fatal error, the program execution has to be aborted
-}Level;
-const QStringList CLAMLOG_LEVEL_STRINGLIST = {QString("info,debg,warn,crit,fatl").split(",")};
-
-struct LogContext
-{
-    LogContext() = default;
-    LogContext(const char *file_in, int line_in, const char *function_in)
-        : file{file_in}
-        , line{line_in}
-        , function{function_in}
-    {}
-    LogContext(const LogContext &context)
-        : file{context.file}
-        , line{context.line}
-        , function{context.function}
-    {}
-
-    LogContext& operator = (const LogContext& rhs)
-    {
-        file = rhs.file;
-        line = rhs.line;
-        function = rhs.function;
-        return *this;
-    }
-
-    const char *file{nullptr};
-    int line{0};
-    const char *function{nullptr};
-};
-
 class Log::LogPrivate
 {
 public:
     LogPrivate()
-        : m_context()
     {
 #ifdef ULOG_COLOR_CONSOLE_STYLE
         out_console_handle_ = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -183,73 +191,40 @@ public:
 #ifdef ULOG_COLOR_CONSOLE_STYLE
     HANDLE      out_console_handle_;
 #endif
-    Level       m_level;
-    LogContext  m_context;
+    FileAppender    file_appender;
+    QMutex          log_mutex;
 };
 
-Log::Log(const char *file, int line, const char *function)
+Log::Log()
     : d_ptr(new LogPrivate)
 {
-    d_ptr->m_context = LogContext(file, line, function);
+
 }
 
 Log::~Log()
 {
+    quit();
     delete d_ptr;
     d_ptr = nullptr;
 }
 
-Log &Log::info()
+Log &Log::instance()
 {
-    d_ptr->m_level = Level::INFO;
-    return *this;
+    static Log instance_clam_log;
+    return instance_clam_log;
 }
 
-Log &Log::debug()
+void Log::log(const QString &message, const LogContext &context)
 {
-    d_ptr->m_level = Level::DEBUG;
-    return *this;
-}
-
-Log &Log::warning()
-{
-    d_ptr->m_level = Level::WARNING;
-    return *this;
-}
-
-Log &Log::critical()
-{
-    d_ptr->m_level = Level::CRITICAL;
-    return *this;
-}
-
-Log &Log::fatal()
-{
-    d_ptr->m_level = Level::FATAL;
-    return *this;
-}
-
-void Log::operator <<(int nummber)
-{
-    log(QString::number(nummber));
-}
-
-void Log::operator <<(QString message)
-{
-    log(message);
-}
-
-void Log::log(const QString &message)
-{
-    QString first_process_msg = format(message);
-
+    QMutexLocker lock(&(d_ptr->log_mutex));
+    QString first_process_msg = format(message, context);
     QString final_msg = first_process_msg;
-    final_msg.replace("%{l}", CLAMLOG_LEVEL_STRINGLIST[d_ptr->m_level]);
-    FileAppender::instance().addMessage(final_msg);
+    final_msg.replace("%{l}", CLAMLOG_LEVEL_STRINGLIST[context.lvl]);
+    d_ptr->file_appender.addMessage(final_msg);
 
 #ifdef ULOG_COLOR_UNIX_STYLE
     QString lvl_console_str;
-    switch (d_ptr->m_level)
+    switch (context.lvl)
     {
     case Level::INFO :
         lvl_console_str = "\033[0;32;1m"+CLAMLOG_LEVEL_STRINGLIST[Level::INFO]+"\033[0m";//green
@@ -288,7 +263,7 @@ void Log::log(const QString &message)
 
             if( i != (msg_str_list.size()-1))
             {
-                switch (d_ptr->m_level)
+                switch (context.lvl)
                 {
                     case Level::INFO :
                         lvl_console_str = CLAMLOG_LEVEL_STRINGLIST[Level::INFO];
@@ -326,7 +301,15 @@ void Log::log(const QString &message)
 #endif
 }
 
-QString Log::format(const QString &message)
+void Log::quit()
+{
+    QMutexLocker lock(&(d_ptr->log_mutex));
+    d_ptr->file_appender.stop();
+    d_ptr->file_appender.quit();
+    d_ptr->file_appender.wait();
+}
+
+QString Log::format(const QString &message, const LogContext &context)
 {
     QString format_msg("[%{yyyy}-%{MM}-%{dd} %{hh}:%{mm}:%{ss}:%{zzz}][%{t}][%{l}][%{f}][%{r}][%{n}]: %{d}");
     QDateTime curDataTime = QDateTime::currentDateTime();
@@ -339,11 +322,12 @@ QString Log::format(const QString &message)
     format_msg.replace("%{zzz}", curDataTime.toString("zzz"));
     format_msg.replace("%{t}", "0x" + QString("%1").arg(
                            qulonglong(QThread::currentThread()), 10, 16, QLatin1Char('0')));
-    format_msg.replace("%{f}", QString(d_ptr->m_context.file));
-    format_msg.replace("%{r}", QString::number(d_ptr->m_context.line));
-    format_msg.replace("%{n}", QString(d_ptr->m_context.function));
+    format_msg.replace("%{f}", QString(context.file));
+    format_msg.replace("%{r}", QString::number(context.line));
+    format_msg.replace("%{n}", QString(context.function));
     format_msg.replace("%{d}", message);
     return format_msg;
 }
 
 } // namespace Clam
+
