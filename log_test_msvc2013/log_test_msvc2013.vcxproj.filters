@@ -36,7 +36,7 @@
     <ClCompile Include="MainWindow.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\log.cpp">
+    <ClCompile Include="..\clamlog.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -56,7 +56,7 @@
     </QtRcc>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\log.h">
+    <ClInclude Include="..\clamlog.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

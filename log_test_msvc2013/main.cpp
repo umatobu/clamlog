@@ -1,6 +1,6 @@
 #include "MainWindow.h"
 #include <QtWidgets/QApplication>
-#include "../log.h"
+#include "../clamlog.h"
 
 int main(int argc, char *argv[])
 {
@@ -15,5 +15,8 @@ int main(int argc, char *argv[])
     cFatal() << 999;
     cDebug() << "AAA";
 
-    return a.exec();
+    int quit_ = a.exec();
+    cDebug() << QObject::tr("program exits: %1").arg(quit_);
+    Clam::Log::instance().quit();
+    return quit_;
 }
